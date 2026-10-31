@@ -12,6 +12,9 @@ pub struct Client {
     pub floating: bool,
     /// Set if the window is in a special workspace.
     pub special_name: Option<String>,
+    pub pid: Option<i64>,
+    #[allow(dead_code)]
+    pub initial_class: Option<String>,
 }
 
 fn run(cmd: &[&str]) -> Option<String> {
@@ -42,6 +45,25 @@ pub fn active_workspace() -> Option<(i64, String)> {
     ))
 }
 
+/// Address of the currently active window, if any.
+pub fn active_window_address() -> Option<String> {
+    let json = run(&["hyprctl", "-j", "activewindow"])?;
+    let v: Value = serde_json::from_str(&json).ok()?;
+    Some(v.get("address")?.as_str()?.to_string())
+}
+
+/// Close a window by its address.
+pub fn close_window(address: &str) {
+    run(&[
+        "hyprctl",
+        "dispatch",
+        &format!(
+            "hl.dsp.window.close({{ window = {} }})",
+            lua_str(&format!("address:{}", address))
+        ),
+    ]);
+}
+
 /// List of all mapped client windows.
 pub fn clients() -> Vec<Client> {
     let Some(json) = run(&["hyprctl", "-j", "clients"]) else {
@@ -68,6 +90,8 @@ pub fn clients() -> Vec<Client> {
                     .and_then(|n| n.as_str())
                     .and_then(|n| n.strip_prefix("special:"))
                     .map(|n| n.to_string()),
+                pid: c.get("pid").and_then(|p| p.as_i64()),
+                initial_class: c.get("initialClass").and_then(|s| s.as_str()).map(|s| s.to_string()),
             })
         })
         .collect()
@@ -91,8 +115,8 @@ fn lua_str(s: &str) -> String {
 /// Focus window: one call to `hl.dsp.focus` directly moves to the window's
 /// workspace. Windows in special workspaces are opened via toggle special.
 pub fn focus(client: &Client) {
-    // simpan posisi cursor — dispatcher focus nge-warp ke tengah window,
-    // kita warp balik biar cursor nggak nyelip.
+    // Save cursor position — focus dispatcher warps to center of the window,
+    // warp back so cursor doesn't jump.
     let cursor = cursor_pos();
 
     if let Some(special) = &client.special_name {
@@ -114,7 +138,7 @@ pub fn focus(client: &Client) {
             lua_str(&format!("address:{}", client.address))
         ),
     ]);
-    // warp cursor balik ke posisi semula
+    // Warp cursor back to previous position
     if let Some((x, y)) = cursor {
         run(&["hyprctl", "dispatch", &format!("hl.dsp.cursor.move({{ x = {}, y = {} }})", x, y)]);
     }
@@ -122,10 +146,21 @@ pub fn focus(client: &Client) {
 
 /// Launch command via compositor, to ensure the Hyprland env is correct.
 pub fn spawn(command: &str) {
+    let resolved = if !crate::config::binary_exists(command) {
+        let (_, rcmd) = crate::config::resolve_app_info(command, None);
+        if crate::config::binary_exists(&rcmd) {
+            rcmd
+        } else {
+            command.to_string()
+        }
+    } else {
+        command.to_string()
+    };
+
     run(&[
         "hyprctl",
         "dispatch",
-        &format!("hl.dsp.exec_cmd({})", lua_str(command)),
+        &format!("hl.dsp.exec_cmd({})", lua_str(&resolved)),
     ]);
 }
 
