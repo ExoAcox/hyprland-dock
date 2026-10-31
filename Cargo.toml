@@ -1,7 +1,14 @@
 [package]
-name = "hypr-dock"
+name = "hyprland-dock"
 version = "0.1.0"
 edition = "2021"
+authors = ["Anas Arifin <anasarifin1995@gmail.com>"]
+description = "A lightweight, blazing-fast, and modern dock for Hyprland built with Rust and GTK4"
+license = "MIT"
+repository = "https://github.com/ExoAcox/hyprland-dock"
+readme = "README.md"
+keywords = ["hyprland", "dock", "wayland", "gtk4", "layer-shell"]
+categories = ["command-line-utilities", "gui"]
 
 [dependencies]
 gtk4 = { version = "0.11", features = ["v4_12"] }

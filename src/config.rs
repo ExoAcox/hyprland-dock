@@ -1,4 +1,4 @@
-// ~/.config/hypr-dock/apps.conf
+// ~/.config/hyprland-dock/apps.conf
 // Format per line:  class,icon,command
 // Empty lines and `#` comments are skipped.
 
@@ -12,11 +12,14 @@ pub struct PinnedApp {
     pub command: String,
 }
 
-fn config_path() -> PathBuf {
+fn config_dir() -> PathBuf {
     dirs::config_dir()
         .expect("Failed to resolve $XDG_CONFIG_HOME")
-        .join("hypr-dock")
-        .join("apps.conf")
+        .join("hyprland-dock")
+}
+
+fn config_path() -> PathBuf {
+    config_dir().join("apps.conf")
 }
 
 pub fn default_content() -> String {
@@ -255,8 +258,8 @@ pub fn resolve_app_info(class: &str, pid: Option<i64>) -> (String, String) {
     (class.to_string(), class.to_lowercase())
 }
 
-// ~/.config/hypr-dock/dock.conf   → dock configuration
-// ~/.config/hypr-dock/style.css  → theme (generated if missing)
+// ~/.config/hyprland-dock/dock.conf   → dock configuration
+// ~/.config/hyprland-dock/style.css  → theme (generated if missing)
 
 use serde::Deserialize;
 
@@ -283,23 +286,12 @@ impl Default for ConfigFile {
 }
 
 fn toml_path() -> PathBuf {
-    dirs::config_dir()
-        .expect("Failed to resolve $XDG_CONFIG_HOME")
-        .join("hypr-dock")
-        .join("dock.conf")
-}
-
-/// Legacy config filename, used for automatic migration.
-fn legacy_path() -> PathBuf {
-    dirs::config_dir()
-        .expect("Failed to resolve $XDG_CONFIG_HOME")
-        .join("hypr-dock")
-        .join("hypr-dock.toml")
+    config_dir().join("dock.conf")
 }
 
 pub fn default_toml() -> String {
     String::from(
-        r##"# ~/.config/hypr-dock/dock.conf
+        r##"# ~/.config/hyprland-dock/dock.conf
 
 icon_size = 36        # px
 anchor = "bottom"     # bottom | top
@@ -316,7 +308,7 @@ pub fn save_toml(cfg: &ConfigFile) -> std::io::Result<()> {
         let _ = fs::create_dir_all(parent);
     }
     let content = format!(
-        "# ~/.config/hypr-dock/dock.conf\n\n\
+        "# ~/.config/hyprland-dock/dock.conf\n\n\
          icon_size = {}        # px\n\
          anchor = \"{}\"     # bottom | top\n\
          animation_ms = {}    # duration of the slide in/out animation\n\
@@ -331,12 +323,7 @@ pub fn load_toml() -> ConfigFile {
     let path = toml_path();
 
     if !path.exists() {
-        // migration: move legacy hypr-dock.toml content (if present) to dock.conf
-        if let Ok(old) = fs::read_to_string(legacy_path()) {
-            let _ = fs::write(&path, old);
-            let _ = fs::remove_file(legacy_path());
-            eprintln!("hypr-dock: migrated hypr-dock.toml to dock.conf");
-        } else if let Some(parent) = path.parent() {
+        if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
             let _ = fs::write(&path, default_toml());
         }
@@ -344,7 +331,7 @@ pub fn load_toml() -> ConfigFile {
 
     match fs::read_to_string(&path) {
         Ok(s) => toml::from_str(&s).unwrap_or_else(|e| {
-            eprintln!("hypr-dock: dock.conf invalid, falling back to defaults: {e}");
+            eprintln!("hyprland-dock: dock.conf invalid, falling back to defaults: {e}");
             ConfigFile::default()
         }),
         Err(_) => ConfigFile::default(),
@@ -353,7 +340,7 @@ pub fn load_toml() -> ConfigFile {
 
 // ---- theme CSS ----
 
-pub const DEFAULT_CSS: &str = r#"/** ~/.config/hypr-dock/style.css — hypr-dock theme
+pub const DEFAULT_CSS: &str = r#"/** ~/.config/hyprland-dock/style.css — hyprland-dock theme
  * Feel free to customize: colors, hover highlights, indicators, padding.
  * Selectors:
  *   window.dock-window      — dock window (must be transparent for floating icons)
@@ -454,10 +441,7 @@ pub fn default_css() -> String {
 }
 
 pub fn css_path() -> PathBuf {
-    dirs::config_dir()
-        .expect("Failed to resolve $XDG_CONFIG_HOME")
-        .join("hypr-dock")
-        .join("style.css")
+    config_dir().join("style.css")
 }
 
 pub fn load_css() -> String {
@@ -468,11 +452,11 @@ pub fn load_css() -> String {
             let _ = fs::create_dir_all(parent);
         }
         let _ = fs::write(&path, default_css());
-        eprintln!("hypr-dock: style.css does not exist, generated default template");
+        eprintln!("hyprland-dock: style.css does not exist, generated default template");
     }
 
     fs::read_to_string(&path).unwrap_or_else(|e| {
-        eprintln!("hypr-dock: failed to read style.css, using default template: {e}");
+        eprintln!("hyprland-dock: failed to read style.css, using default template: {e}");
         default_css()
     })
 }

@@ -7,12 +7,12 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 
 use crate::config::PinnedApp;
 
-/// Global CSS theme from external file: ~/.config/hypr-dock/style.css
+/// Global CSS theme from external file: ~/.config/hyprland-dock/style.css
 /// Uses USER priority to override system GTK themes.
 
 fn main() {
     let app = gtk4::Application::builder()
-        .application_id("io.github.yuju.hyprdock")
+        .application_id("io.github.anasarifin.hyprlanddock")
         .build();
 
     app.connect_activate(build_ui);
@@ -62,7 +62,7 @@ fn build_ui(app: &gtk4::Application) {
 
     // ---- layer shell setup ----
     if !gtk4_layer_shell::is_supported() {
-        eprintln!("hypr-dock: compositor does not support layer-shell");
+        eprintln!("hyprland-dock: compositor does not support layer-shell");
         std::process::exit(1);
     }
     let anchor_edge = match cfg.borrow().anchor.as_str() {
@@ -71,7 +71,7 @@ fn build_ui(app: &gtk4::Application) {
     };
     win.init_layer_shell();
     win.set_layer(Layer::Top);
-    win.set_namespace(Some("hypr-dock"));
+    win.set_namespace(Some("hyprland-dock"));
     win.set_anchor(anchor_edge, true);
     win.set_exclusive_zone(-1); // -1 = match content height so windows do not overlap
 
@@ -273,17 +273,17 @@ fn event_socket_path() -> Option<std::path::PathBuf> {
 fn start_event_listener() {
     std::thread::spawn(move || {
         let Some(path) = event_socket_path() else {
-            eprintln!("hypr-dock: HYPRLAND_INSTANCE_SIGNATURE not found");
+            eprintln!("hyprland-dock: HYPRLAND_INSTANCE_SIGNATURE not found");
             return;
         };
         let mut stream = match std::os::unix::net::UnixStream::connect(&path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("hypr-dock: failed to connect to event socket {path:?}: {e}");
+                eprintln!("hyprland-dock: failed to connect to event socket {path:?}: {e}");
                 return;
             }
         };
-        eprintln!("hypr-dock: event socket connected: {path:?}");
+        eprintln!("hyprland-dock: event socket connected: {path:?}");
 
         use std::io::Read;
         let mut buf = [0u8; 8192];

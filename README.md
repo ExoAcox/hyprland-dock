@@ -1,61 +1,137 @@
-# hypr-dock
+<div align="center">
 
-Minimalist dock for Hyprland — Rust + GTK4 + gtk4-layer-shell.
+# hyprland-dock
 
-## Features
-- Multi-window support: each open window displays its own icon in the dock
-- Pinned applications defined in `~/.config/hypr-dock/apps.conf`
-- Running unpinned applications automatically appear at the end of the dock
-- Left-click = focus that specific window; if not running = launch app
-- Right-click context menu on icons (New Window, Close Window, Pin/Unpin, Lock/Unlock dock)
-- Active window indicator (green line + subtle background highlight for currently focused window)
-- Drag-and-drop icon reordering with mouse (active when dock is Unlocked)
-- Hyprland IPC event socket integration with backup polling
+**A lightweight, blazing-fast, and modern dock for [Hyprland](https://hyprland.org)**  
+*Built with Rust, GTK4, and gtk4-layer-shell.*
 
-## Build & Install
-Easiest method (automatically builds release binary and installs to `~/.local/bin`):
+[![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/) [![GTK4](https://img.shields.io/badge/toolkit-GTK4-blue.svg)](https://gtk.org/) [![Wayland](https://img.shields.io/badge/protocol-Wayland-brightgreen.svg)](https://wayland.freedesktop.org/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+<br/>
+
+<img src="assets/screenshot.webp" alt="hyprland-dock screenshot" width="800" />
+
+</div>
+
+---
+
+## ✨ Features
+
+- **Blazing Fast & Low Memory Footprint**: Native Rust binary with immediate startup and minimal resource usage.
+- **Hyprland IPC Native Integration**: Listens directly to Hyprland's `socket2.sock` event stream for instant, zero-lag window tracking and state synchronization.
+- **Smart Auto-Hide**: Automatically slides out when tiled windows occupy the active workspace, and slides back in when you approach the screen edge hotzone or switch to an empty/floating workspace.
+- **Rich Context Menu**: Right-click any icon to launch a new instance, close the window, pin/unpin from the dock, or lock/unlock icon positions.
+- **Full GTK4 CSS Theming**: Fully customizable styling via `~/.config/hyprland-dock/style.css` with live reloading.
+
+---
+
+## 📦 Prerequisites
+
+Ensure you have the following system libraries installed on your system:
+
+### Arch Linux
 ```sh
-./install.sh
+sudo pacman -S rust cargo gtk4 gtk4-layer-shell
 ```
-
-Or using `make`:
+### Debian / Ubuntu
 ```sh
-make install
+sudo apt install cargo libgtk-4-dev libgtk4-layer-shell-dev
 ```
 
-Or manually using Cargo:
+### Fedora
 ```sh
-cargo build --release
-install -Dm755 target/release/hypr-dock ~/.local/bin/hypr-dock
+sudo dnf install cargo gtk4-devel gtk4-layer-shell-devel
 ```
 
-## Running
+---
+
+## 🚀 Installation
+
+### One-Line Install (Recommended)
+Automatically builds and installs `hyprland-dock` system-wide to `/usr/local/bin`:
 ```sh
-hypr-dock
-```
-Or autostart via `hyprland.conf`:
-```
-exec-once = hypr-dock
+curl -sSL https://raw.githubusercontent.com/ExoAcox/hyprland-dock/master/install.sh | bash
 ```
 
-## Configuration (`dock.conf`)
+### Via Cargo
+```sh
+cargo install --git https://github.com/ExoAcox/hyprland-dock.git
+```
+
+---
+
+## 🖥️ Usage
+
+Run the dock directly from your terminal:
+```sh
+hyprland-dock
+```
+
+### Autostart with Hyprland
+
+**Lua Configuration (`~/.config/hypr/autostart.lua`):**
+```lua
+hl.exec_cmd("hyprland-dock")
+```
+
+---
+
+## ⚙️ Configuration
+
+Configuration files are located in `~/.config/hyprland-dock/` and are automatically generated with sensible defaults on the first launch.
+
+### 1. `dock.conf` (Settings)
+Located at `~/.config/hyprland-dock/dock.conf`:
 ```toml
-icon_size = 36        # px
-anchor = "bottom"     # bottom | top
-animation_ms = 130    # slide in/out animation duration
-icon_theme = "Papirus" # icon theme (dock-only, e.g. "Papirus", "Papirus-Dark", "Papirus-Light")
-locked = false        # lock icon positions (prevent drag & drop reorder)
+icon_size = 36          # Icon dimension in pixels
+anchor = "bottom"       # "bottom" | "top"
+animation_ms = 130      # Slide in/out animation duration in milliseconds
+icon_theme = "Papirus"  # Icon theme override (e.g. "Papirus", "Adwaita", "Tela")
+locked = false          # If true, locks dock icons and disables drag-and-drop reordering
 ```
-Saved at `~/.config/hypr-dock/dock.conf` (automatically generated on first run).
 
-## Applications (`apps.conf`)
-```
-# class,icon,command
+### 2. `apps.conf` (Pinned Launchers)
+Located at `~/.config/hyprland-dock/apps.conf`. Defines apps that stay pinned on the dock even when not running:
+```csv
+# Format: class,icon,command
 firefox,firefox,firefox
 kitty,kitty,kitty
 thunar,thunar,thunar
 ```
-- `class` = window class from `hyprctl clients`
-- `icon` = icon name from theme (leave blank → fallback to class)
-- `command` = command to launch the app
+- **class**: Window class as reported by `hyprctl clients` (or app ID).
+- **icon**: Icon theme name (leave empty to fallback to class).
+- **command**: Executable binary or launch command.
 
+*Running applications that are not pinned will automatically appear at the end of the dock.*
+
+### 3. `style.css` (Custom Theming)
+Located at `~/.config/hyprland-dock/style.css`. Customize colors, borders, hover animations, and popovers using standard GTK4 CSS selectors:
+
+| Selector | Description |
+| :--- | :--- |
+| `window.dock-window` | Top-level Wayland layer-shell window container |
+| `.dock` | Horizontal container box for icons |
+| `.dock button.dock-btn` | Individual icon launcher button |
+| `.dock button.dock-btn:hover image` | Icon hover transform / zoom animation |
+| `.dock button.dock-btn.running` | Indicator bar for open windows |
+| `.dock button.dock-btn.active` | Indicator bar for currently focused window |
+| `.dock button.dock-btn.drop-target` | Target indicator line during drag-and-drop |
+| `popover.dock-tooltip` | Hover tooltip popup |
+| `popover.dock-popover` | Right-click context menu popup |
+
+---
+
+## 🤝 Contributing
+
+Contributions, bug reports, and suggestions are warmly welcomed!
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+Distributed under the [MIT License](LICENSE). Copyright (c) 2026 Anas Arifin.
