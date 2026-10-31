@@ -1,0 +1,7 @@
+/target
+/target/release
+/target/debug
+Cargo.lock
+*.log
+.DS_Store
+Thumbs.db
