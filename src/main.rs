@@ -591,9 +591,10 @@ fn setup_hover_tooltip(
     let preview_width = cfg.borrow().window_preview_width.max(120);
     let label = gtk4::Label::new(Some(text));
     label.add_css_class("dock-tooltip-label");
+    label.set_halign(gtk4::Align::Center);
     label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-    let max_chars = ((preview_width as f64) / 9.5).round() as i32;
-    label.set_max_width_chars(max_chars.clamp(16, 38));
+    let max_chars = ((preview_width as f64) / 9.0).round() as i32;
+    label.set_max_width_chars(max_chars.clamp(16, 100));
     container.append(&label);
 
     popover.set_child(Some(&container));
@@ -633,8 +634,9 @@ fn setup_hover_tooltip(
             let is_hovered_debounced = is_hovered_enter.clone();
             let debounce_ref = debounce_enter.clone();
 
-            let source_id =
-                glib::timeout_add_local_once(std::time::Duration::from_millis(delay_ms), move || {
+            let source_id = glib::timeout_add_local_once(
+                std::time::Duration::from_millis(delay_ms),
+                move || {
                     debounce_ref.borrow_mut().take();
                     if !is_hovered_debounced.get()
                         || is_menu_open()
@@ -692,7 +694,8 @@ fn setup_hover_tooltip(
                             }
                         }
                     });
-                });
+                },
+            );
             *debounce_enter.borrow_mut() = Some(source_id);
         } else {
             picture_enter.set_visible(false);

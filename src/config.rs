@@ -458,7 +458,7 @@ popover.dock-tooltip contents {
 }
 .dock-tooltip-preview {
     border-radius: 6px;
-    margin-top: 10px;
+    margin-top: 6px;
 }
 "#;
 
