@@ -364,6 +364,7 @@ pub const DEFAULT_CSS: &str = r#"/** ~/.config/hyprland-dock/style.css — hyprl
  * Selectors:
  *   window.dock-window      — dock window (must be transparent for floating icons)
  *   .dock                   — icon container
+ *   .dock.has-window        — background pill when revealed over windows
  *   .dock-btn               — per-app button
  *   .dock-btn:hover         — highlight when hovered
  *   .dock-btn.running       — running app indicator (bottom bar)
@@ -378,7 +379,24 @@ window.dock-window {
 }
 .dock {
     background: none;
-    padding: 2px 6px;
+    padding: 3px 8px;
+    border-radius: 16px 16px 0 0;
+    border: 1px solid transparent;
+    border-bottom: none;
+    transition: background-color 200ms ease, border-color 200ms ease;
+}
+.dock.anchor-top {
+    border-top: none;
+    border-bottom: 1px solid transparent;
+    border-radius: 0 0 16px 16px;
+}
+.dock.has-window {
+    background-color: rgba(24, 24, 37, 0.70);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.35);
+}
+.dock.anchor-top.has-window {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 .dock button.dock-btn {
     background: transparent;
@@ -462,8 +480,25 @@ popover.dock-tooltip contents {
 }
 "#;
 
+pub const DEFAULT_STYLE_TEMPLATE: &str = r#"/** ~/.config/hyprland-dock/style.css — hyprland-dock theme
+ * Feel free to customize: colors, hover highlights, indicators, padding.
+ * Selectors:
+ *   window.dock-window      — dock window (must be transparent for floating icons)
+ *   .dock                   — icon container
+ *   .dock.has-window        — background pill when revealed over windows
+ *   .dock-btn               — per-app button
+ *   .dock-btn:hover         — highlight when hovered
+ *   .dock-btn.running       — running app indicator (bottom bar)
+ *   .dock-btn.drop-target   — drop target highlight during drag
+ *   popover.dock-tooltip    - icon tooltip hover
+ *   popover.dock-popover    — right-click context menu
+ *   .dock-tooltip-label     - tooltip label
+ *   .dock-tooltip-preview   - thumbnail preview
+ */
+"#;
+
 pub fn default_css() -> String {
-    DEFAULT_CSS.to_string()
+    DEFAULT_STYLE_TEMPLATE.to_string()
 }
 
 pub fn css_path() -> PathBuf {

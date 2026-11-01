@@ -24,22 +24,22 @@ fn build_ui(app: &gtk4::Application) {
 
     let display = gtk4::gdk::Display::default().expect("no display");
 
-    // Built-in base CSS provider loaded from config::DEFAULT_CSS
+    // Built-in base CSS provider loaded from config::DEFAULT_CSS (USER priority overrides ~/.config/gtk-4.0/gtk.css)
     let base_css = gtk4::CssProvider::new();
     base_css.load_from_string(config::DEFAULT_CSS);
     gtk4::style_context_add_provider_for_display(
         &display,
         &base_css,
-        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        gtk4::STYLE_PROVIDER_PRIORITY_USER,
     );
 
-    // Global CSS provider loaded from style.css (user custom styles)
+    // Global CSS provider loaded from style.css (user custom overrides)
     let css = gtk4::CssProvider::new();
     css.load_from_string(&config::load_css());
     gtk4::style_context_add_provider_for_display(
         &display,
         &css,
-        gtk4::STYLE_PROVIDER_PRIORITY_USER,
+        gtk4::STYLE_PROVIDER_PRIORITY_USER + 1,
     );
     let settings = gtk4::Settings::for_display(&display);
     let theme_name = cfg.borrow().icon_theme.clone();
@@ -72,6 +72,7 @@ fn build_ui(app: &gtk4::Application) {
     win.init_layer_shell();
     win.set_layer(Layer::Top);
     win.set_namespace(Some("hyprland-dock"));
+    hypr::setup_layer_rules();
     win.set_anchor(anchor_edge, true);
     win.set_exclusive_zone(-1); // -1 = match content height so windows do not overlap
 
@@ -377,7 +378,8 @@ fn refresh_dock(
     // Auto-hide: dock hides when active workspace has tiled windows.
     // Empty or full floating ("window mode") -> shown.
     // Cursor in hotzone / menu open -> stays shown.
-    let hide_dock = workspace_has_tiling(&running)
+    let has_tiling = workspace_has_tiling(&running);
+    let hide_dock = has_tiling
         && !MOUSE_HOT.load(std::sync::atomic::Ordering::Relaxed)
         && !is_menu_open();
 
@@ -385,6 +387,15 @@ fn refresh_dock(
         "top" => Edge::Top,
         _ => Edge::Bottom,
     };
+
+    // Toggle background styling when on a workspace with tiled windows
+    if has_tiling {
+        if !dock.has_css_class("has-window") {
+            dock.add_css_class("has-window");
+        }
+    } else if dock.has_css_class("has-window") {
+        dock.remove_css_class("has-window");
+    }
 
     if hide_dock {
         slide(win, false, anchor, anim_ms);
@@ -593,7 +604,7 @@ fn setup_hover_tooltip(
     label.add_css_class("dock-tooltip-label");
     label.set_halign(gtk4::Align::Center);
     label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-    let max_chars = ((preview_width as f64) / 9.0).round() as i32;
+    let max_chars = ((preview_width as f64) / 8.5).round() as i32;
     label.set_max_width_chars(max_chars.clamp(16, 100));
     container.append(&label);
 

@@ -1,6 +1,6 @@
 [package]
 name = "hyprland-dock"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["Anas Arifin <anasarifin1995@gmail.com>"]
 description = "A lightweight, blazing-fast, and modern dock for Hyprland built with Rust and GTK4"

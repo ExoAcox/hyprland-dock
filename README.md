@@ -76,6 +76,16 @@ hyprland-dock
 hl.exec_cmd("hyprland-dock")
 ```
 
+**Backdrop Blur (`~/.config/hypr/windowrule.lua`):**
+```lua
+hl.layer_rule({
+    match = { namespace = "hyprland-dock" },
+    blur = true,
+    ignore_alpha = 0.2,
+})
+```
+*(Or legacy `hyprland.conf`: `layerrule = blur, hyprland-dock` & `layerrule = ignorealpha 0.2, hyprland-dock`)*
+
 ---
 
 ## ⚙️ Configuration
@@ -116,6 +126,7 @@ Located at `~/.config/hyprland-dock/style.css`. Customize colors, borders, hover
 | :--- | :--- |
 | `window.dock-window` | Top-level Wayland layer-shell window container |
 | `.dock` | Horizontal container box for icons |
+| `.dock.has-window` | Background pill container when revealed over windows |
 | `.dock button.dock-btn` | Individual icon launcher button |
 | `.dock button.dock-btn:hover image` | Icon hover transform / zoom animation |
 | `.dock button.dock-btn.running` | Indicator bar for open windows |

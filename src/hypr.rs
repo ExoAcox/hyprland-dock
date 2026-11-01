@@ -64,6 +64,22 @@ pub fn close_window(address: &str) {
     ]);
 }
 
+/// Ensure compositor layer rules (blur, ignore_alpha) are registered for hyprland-dock.
+pub fn setup_layer_rules() {
+    let _ = run(&[
+        "hyprctl",
+        "eval",
+        "hl.layer_rule({ match = { namespace = 'hyprland-dock' }, blur = true, ignore_alpha = 0.2 })",
+    ]);
+    let _ = run(&["hyprctl", "keyword", "layerrule", "blur, hyprland-dock"]);
+    let _ = run(&[
+        "hyprctl",
+        "keyword",
+        "layerrule",
+        "ignorealpha 0.2, hyprland-dock",
+    ]);
+}
+
 /// List of all mapped client windows.
 pub fn clients() -> Vec<Client> {
     let Some(json) = run(&["hyprctl", "-j", "clients"]) else {
