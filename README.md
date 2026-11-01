@@ -10,7 +10,8 @@
 <br/>
 <img src="assets/screenshot.webp" alt="hyprland-dock screenshot" width="800" />
 <br/>
-<video src="https://ik.imagekit.io/ExoAcox/hyprland-dock.mp4?updatedAt=1793511623076" controls width="800"></video>
+<br/>
+<a href="https://ik.imagekit.io/ExoAcox/hyprland-dock.mp4?updatedAt=1793511623076"><b>Watch Demo Video</b></a>
 
 </div>
 
