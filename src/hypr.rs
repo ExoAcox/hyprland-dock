@@ -179,3 +179,155 @@ pub fn icon_image(icon_theme: &gtk4::IconTheme, class: &str, icon: &str) -> gtk4
     img.set_pixel_size(ICON_SIZE);
     img
 }
+
+/// Collect active and special workspace IDs across all connected monitors.
+pub fn active_workspace_ids() -> Vec<i64> {
+    let Some(json) = run(&["hyprctl", "-j", "monitors"]) else {
+        return Vec::new();
+    };
+    let Ok(list) = serde_json::from_str::<Vec<Value>>(&json) else {
+        return Vec::new();
+    };
+    let mut ids = Vec::new();
+    for m in list {
+        if let Some(id) = m
+            .get("activeWorkspace")
+            .and_then(|w| w.get("id"))
+            .and_then(|i| i.as_i64())
+        {
+            ids.push(id);
+        }
+        if let Some(sid) = m
+            .get("specialWorkspace")
+            .and_then(|w| w.get("id"))
+            .and_then(|i| i.as_i64())
+        {
+            if sid != 0 {
+                ids.push(sid);
+            }
+        }
+    }
+    ids
+}
+
+static PREVIEW_CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>> =
+    std::sync::OnceLock::new();
+
+fn preview_cache() -> &'static std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>> {
+    PREVIEW_CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+/// Capture a JPEG screenshot of a running window by its address via `grim`.
+/// Uses `grim -T <stableId>` to directly capture toplevel surfaces on any workspace,
+/// with geometry crop and cache fallbacks.
+pub fn capture_window_preview(address: &str) -> Option<Vec<u8>> {
+    let json = run(&["hyprctl", "-j", "clients"])?;
+    let list: Vec<Value> = serde_json::from_str(&json).ok()?;
+
+    // Prune closed windows from cache
+    let active_addresses: std::collections::HashSet<&str> = list
+        .iter()
+        .filter_map(|c| c.get("address").and_then(|a| a.as_str()))
+        .collect();
+    if let Ok(mut cache) = preview_cache().lock() {
+        cache.retain(|k, _| active_addresses.contains(k.as_str()));
+    }
+
+    let active_ws = active_workspace_ids();
+
+    for c in &list {
+        if c.get("address")?.as_str()? == address {
+            let mapped = c.get("mapped").and_then(|m| m.as_bool()).unwrap_or(false);
+            if !mapped {
+                return None;
+            }
+
+            // Method 1: Target Wayland toplevel buffer via grim -T <stableId> (captures any workspace!)
+            if let Some(stable_id) = c.get("stableId").and_then(|s| s.as_str()) {
+                if !stable_id.is_empty() {
+                    if let Ok(output) = std::process::Command::new("grim")
+                        .args(["-T", stable_id, "-t", "jpeg", "-q", "60", "-"])
+                        .output()
+                    {
+                        if output.status.success() && !output.stdout.is_empty() {
+                            let bytes = output.stdout;
+                            if let Ok(mut cache) = preview_cache().lock() {
+                                cache.insert(address.to_string(), bytes.clone());
+                            }
+                            return Some(bytes);
+                        }
+                    }
+                }
+            }
+
+            // Method 2: Geometry crop fallback if window is on active monitor workspace
+            let ws_id = c
+                .get("workspace")
+                .and_then(|w| w.get("id"))
+                .and_then(|i| i.as_i64())
+                .unwrap_or(-1);
+            let pinned = c.get("pinned").and_then(|p| p.as_bool()).unwrap_or(false);
+            let is_on_active_screen = pinned || active_ws.contains(&ws_id);
+
+            if is_on_active_screen {
+                let at = c.get("at")?.as_array()?;
+                let size = c.get("size")?.as_array()?;
+                if at.len() >= 2 && size.len() >= 2 {
+                    let x = at[0].as_i64()?;
+                    let y = at[1].as_i64()?;
+                    let w = size[0].as_i64()?;
+                    let h = size[1].as_i64()?;
+                    if w > 0 && h > 0 {
+                        let geom = format!("{},{} {}x{}", x, y, w, h);
+                        if let Ok(output) = std::process::Command::new("grim")
+                            .args(["-t", "jpeg", "-q", "60", "-g", &geom, "-"])
+                            .output()
+                        {
+                            if output.status.success() && !output.stdout.is_empty() {
+                                let bytes = output.stdout;
+                                if let Ok(mut cache) = preview_cache().lock() {
+                                    cache.insert(address.to_string(), bytes.clone());
+                                }
+                                return Some(bytes);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Method 3: Fallback to cached thumbnail if previously captured
+            if let Ok(cache) = preview_cache().lock() {
+                if let Some(cached) = cache.get(address) {
+                    return Some(cached.clone());
+                }
+            }
+
+            return None;
+        }
+    }
+    None
+}
+
+/// Scale raw image bytes to an exact target width while maintaining aspect ratio,
+/// and return a GTK4 Texture with those exact dimensions.
+pub fn create_preview_texture(bytes: &[u8], target_width: i32) -> Option<gtk4::gdk::Texture> {
+    use gdk_pixbuf::prelude::*;
+    let loader = gdk_pixbuf::PixbufLoader::new();
+    loader.write(bytes).ok()?;
+    loader.close().ok()?;
+    let pixbuf = loader.pixbuf()?;
+    let orig_w = pixbuf.width();
+    let orig_h = pixbuf.height();
+    if orig_w <= 0 || orig_h <= 0 {
+        return None;
+    }
+    let target_h = ((orig_h as f64 / orig_w as f64) * target_width as f64).round() as i32;
+    let scaled = pixbuf.scale_simple(
+        target_width,
+        target_h.max(1),
+        gdk_pixbuf::InterpType::Bilinear,
+    )?;
+    Some(gtk4::gdk::Texture::for_pixbuf(&scaled))
+}
+
+

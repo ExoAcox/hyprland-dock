@@ -20,7 +20,7 @@
 ## ✨ Features
 
 - **Blazing Fast & Low Memory Footprint**: Native Rust binary with immediate startup and minimal resource usage.
-- **Hyprland IPC Native Integration**: Listens directly to Hyprland's `socket2.sock` event stream for instant, zero-lag window tracking and state synchronization.
+- **Hyprland IPC Native Integration**: Listens directly to Hyprland's `socket2.sock` event stream for instant, zero-lag window tracking, state synchronization and live window preview.
 - **Smart Auto-Hide**: Automatically slides out when tiled windows occupy the active workspace, and slides back in when you approach the screen edge hotzone or switch to an empty/floating workspace.
 - **Rich Context Menu**: Right-click any icon to launch a new instance, close the window, pin/unpin from the dock, or lock/unlock icon positions.
 - **Full GTK4 CSS Theming**: Fully customizable styling via `~/.config/hyprland-dock/style.css` with live reloading.
@@ -33,16 +33,16 @@ Ensure you have the following system libraries installed on your system:
 
 ### Arch Linux
 ```sh
-sudo pacman -S rust cargo gtk4 gtk4-layer-shell
+sudo pacman -S rust cargo gtk4 gtk4-layer-shell grim
 ```
 ### Debian / Ubuntu
 ```sh
-sudo apt install cargo libgtk-4-dev libgtk4-layer-shell-dev
+sudo apt install cargo libgtk-4-dev libgtk4-layer-shell-dev grim
 ```
 
 ### Fedora
 ```sh
-sudo dnf install cargo gtk4-devel gtk4-layer-shell-devel
+sudo dnf install cargo gtk4-devel gtk4-layer-shell-devel grim
 ```
 
 ---
@@ -90,6 +90,9 @@ anchor = "bottom"       # "bottom" | "top"
 animation_ms = 130      # Slide in/out animation duration in milliseconds
 icon_theme = "Papirus"  # Icon theme override (e.g. "Papirus", "Adwaita", "Tela")
 locked = false          # If true, locks dock icons and disables drag-and-drop reordering
+window_preview = true  # Show live window thumbnail preview on hover
+window_preview_width = 360 # Preview thumbnail width in pixels
+window_preview_delay = 200 # Hover delay in milliseconds before showing preview
 ```
 
 ### 2. `apps.conf` (Pinned Launchers)

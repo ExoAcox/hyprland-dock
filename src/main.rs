@@ -532,6 +532,7 @@ fn dock_button(
     let btn = gtk4::Button::new();
     btn.set_widget_name("dock-btn");
     btn.add_css_class("dock-btn");
+    btn.set_cursor_from_name(Some("pointer"));
     btn.set_overflow(gtk4::Overflow::Visible);
     if running.is_some() {
         btn.add_css_class("running");
@@ -543,7 +544,7 @@ fn dock_button(
     icon.set_pixel_size(cfg.borrow().icon_size);
     btn.set_child(Some(&icon));
 
-    let hover_popover = setup_hover_tooltip(&btn, &tooltip, cfg);
+    let hover_popover = setup_hover_tooltip(&btn, &tooltip, running.as_ref(), cfg);
     btn.connect_clicked(clone_dock_click(
         dock,
         app.clone(),
@@ -557,9 +558,12 @@ fn dock_button(
 }
 
 /// Floating title tooltip anchored directly above (or below) the icon button instead of tracking cursor.
+/// If window_preview is enabled and the window is running, debounces 500ms before capturing and displaying
+/// an async thumbnail preview of the window.
 fn setup_hover_tooltip(
     btn: &gtk4::Button,
     text: &str,
+    running: Option<&hypr::Client>,
     cfg: &std::rc::Rc<std::cell::RefCell<config::ConfigFile>>,
 ) -> gtk4::Popover {
     let popover = gtk4::Popover::builder()
@@ -574,23 +578,153 @@ fn setup_hover_tooltip(
     popover.add_css_class("dock-tooltip");
     popover.set_parent(btn);
 
+    let container = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    container.set_halign(gtk4::Align::Center);
+
+    let picture = gtk4::Picture::new();
+    picture.add_css_class("dock-tooltip-preview");
+    picture.set_content_fit(gtk4::ContentFit::ScaleDown);
+    picture.set_can_shrink(true);
+    picture.set_visible(false);
+    container.append(&picture);
+
+    let preview_width = cfg.borrow().window_preview_width.max(120);
     let label = gtk4::Label::new(Some(text));
     label.add_css_class("dock-tooltip-label");
     label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-    label.set_max_width_chars(40);
-    popover.set_child(Some(&label));
+    let max_chars = ((preview_width as f64) / 9.5).round() as i32;
+    label.set_max_width_chars(max_chars.clamp(16, 38));
+    container.append(&label);
+
+    popover.set_child(Some(&container));
+
+    let running_address = running.map(|c| c.address.clone());
+    let debounce_source: std::rc::Rc<std::cell::RefCell<Option<glib::SourceId>>> =
+        std::rc::Rc::new(std::cell::RefCell::new(None));
+    let is_hovered = std::rc::Rc::new(std::cell::Cell::new(false));
 
     let motion = gtk4::EventControllerMotion::new();
+
     let popover_enter = popover.clone();
+    let picture_enter = picture.clone();
+    let cfg_enter = cfg.clone();
+    let debounce_enter = debounce_source.clone();
+    let is_hovered_enter = is_hovered.clone();
+
     motion.connect_enter(move |_, _, _| {
-        if !is_menu_open() && !IS_DRAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+        if is_menu_open() || IS_DRAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+
+        is_hovered_enter.set(true);
+
+        // Cancel any pending timer
+        if let Some(source) = debounce_enter.borrow_mut().take() {
+            source.remove();
+        }
+
+        let preview_enabled = cfg_enter.borrow().window_preview;
+        let preview_w = cfg_enter.borrow().window_preview_width.max(120);
+        let delay_ms = cfg_enter.borrow().window_preview_delay;
+
+        if let (true, Some(addr)) = (preview_enabled, running_address.clone()) {
+            let popover_debounced = popover_enter.clone();
+            let picture_debounced = picture_enter.clone();
+            let is_hovered_debounced = is_hovered_enter.clone();
+            let debounce_ref = debounce_enter.clone();
+
+            let source_id =
+                glib::timeout_add_local_once(std::time::Duration::from_millis(delay_ms), move || {
+                    debounce_ref.borrow_mut().take();
+                    if !is_hovered_debounced.get()
+                        || is_menu_open()
+                        || IS_DRAGGING.load(std::sync::atomic::Ordering::Relaxed)
+                    {
+                        return;
+                    }
+
+                    let picture_load = picture_debounced.clone();
+                    let popover_load = popover_debounced.clone();
+                    let is_hovered_load = is_hovered_debounced.clone();
+
+                    let (tx, rx) = std::sync::mpsc::channel::<Option<Vec<u8>>>();
+                    std::thread::spawn(move || {
+                        let jpeg_opt = hypr::capture_window_preview(&addr);
+                        let _ = tx.send(jpeg_opt);
+                    });
+
+                    let mut attempts = 0;
+                    glib::timeout_add_local(std::time::Duration::from_millis(25), move || {
+                        attempts += 1;
+                        if !is_hovered_load.get()
+                            || is_menu_open()
+                            || IS_DRAGGING.load(std::sync::atomic::Ordering::Relaxed)
+                        {
+                            return glib::ControlFlow::Break;
+                        }
+
+                        match rx.try_recv() {
+                            Ok(jpeg_opt) => {
+                                if let Some(bytes) = jpeg_opt {
+                                    if let Some(texture) =
+                                        hypr::create_preview_texture(&bytes, preview_w)
+                                    {
+                                        picture_load.set_paintable(Some(&texture));
+                                        picture_load.set_visible(true);
+                                    } else {
+                                        picture_load.set_visible(false);
+                                    }
+                                } else {
+                                    picture_load.set_visible(false);
+                                }
+                                popover_load.popup();
+                                glib::ControlFlow::Break
+                            }
+                            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                                if attempts > 40 {
+                                    glib::ControlFlow::Break
+                                } else {
+                                    glib::ControlFlow::Continue
+                                }
+                            }
+                            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                                glib::ControlFlow::Break
+                            }
+                        }
+                    });
+                });
+            *debounce_enter.borrow_mut() = Some(source_id);
+        } else {
+            picture_enter.set_visible(false);
             popover_enter.popup();
         }
     });
 
     let popover_leave = popover.clone();
+    let picture_leave = picture.clone();
+    let debounce_leave = debounce_source.clone();
+    let is_hovered_leave = is_hovered.clone();
+
     motion.connect_leave(move |_| {
+        is_hovered_leave.set(false);
+        if let Some(source) = debounce_leave.borrow_mut().take() {
+            source.remove();
+        }
+        picture_leave.set_visible(false);
+        picture_leave.set_paintable(None::<&gtk4::gdk::Paintable>);
         popover_leave.popdown();
+    });
+
+    let picture_closed = picture.clone();
+    let debounce_closed = debounce_source.clone();
+    let is_hovered_closed = is_hovered.clone();
+    popover.connect_closed(move |_| {
+        is_hovered_closed.set(false);
+        if let Some(source) = debounce_closed.borrow_mut().take() {
+            source.remove();
+        }
+        picture_closed.set_visible(false);
+        picture_closed.set_paintable(None::<&gtk4::gdk::Paintable>);
     });
 
     btn.add_controller(motion);
@@ -644,6 +778,7 @@ fn setup_context_menu(
             .css_classes(["dock-menu-btn"])
             .halign(gtk4::Align::Fill)
             .build();
+        new_win_btn.set_cursor_from_name(Some("pointer"));
         let popover_new = popover.clone();
         let cmd = app.command.clone();
         new_win_btn.connect_clicked(move |_| {
@@ -657,6 +792,7 @@ fn setup_context_menu(
             .css_classes(["dock-menu-btn"])
             .halign(gtk4::Align::Fill)
             .build();
+        close_win_btn.set_cursor_from_name(Some("pointer"));
         let popover_close = popover.clone();
         let addr = c.address.clone();
         close_win_btn.connect_clicked(move |_| {
@@ -685,6 +821,7 @@ fn setup_context_menu(
         .css_classes(["dock-menu-btn"])
         .halign(gtk4::Align::Fill)
         .build();
+    pin_btn.set_cursor_from_name(Some("pointer"));
 
     let popover_pin = popover.clone();
     let app_pin = app.clone();
@@ -725,6 +862,7 @@ fn setup_context_menu(
         .css_classes(["dock-menu-btn"])
         .halign(gtk4::Align::Fill)
         .build();
+    lock_btn.set_cursor_from_name(Some("pointer"));
 
     let popover_lock = popover.clone();
     let cfg_lock = cfg.clone();

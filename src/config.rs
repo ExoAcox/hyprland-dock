@@ -271,6 +271,9 @@ pub struct ConfigFile {
     pub animation_ms: u64,
     pub icon_theme: String,
     pub locked: bool,
+    pub window_preview: bool,
+    pub window_preview_width: i32,
+    pub window_preview_delay: u64,
 }
 
 impl Default for ConfigFile {
@@ -281,6 +284,9 @@ impl Default for ConfigFile {
             animation_ms: 130,
             icon_theme: "Papirus".to_string(),
             locked: false,
+            window_preview: true,
+            window_preview_width: 360,
+            window_preview_delay: 200,
         }
     }
 }
@@ -298,6 +304,9 @@ anchor = "bottom"     # bottom | top
 animation_ms = 130    # duration of the slide in/out animation
 icon_theme = "Papirus" # icon theme (dock-only, e.g. "Papirus", "Papirus-Dark", "Papirus-Light")
 locked = false        # lock icon positions (prevent drag & drop reorder)
+window_preview = true # show window thumbnail preview on hover
+window_preview_width = 360 # preview thumbnail width in pixels
+window_preview_delay = 200 # hover delay in milliseconds before showing preview
 "##,
     )
 }
@@ -313,8 +322,18 @@ pub fn save_toml(cfg: &ConfigFile) -> std::io::Result<()> {
          anchor = \"{}\"     # bottom | top\n\
          animation_ms = {}    # duration of the slide in/out animation\n\
          icon_theme = \"{}\" # icon theme\n\
-         locked = {}        # lock icon positions (prevent drag & drop reorder)\n",
-        cfg.icon_size, cfg.anchor, cfg.animation_ms, cfg.icon_theme, cfg.locked
+         locked = {}        # lock icon positions (prevent drag & drop reorder)\n\
+         window_preview = {} # show window thumbnail preview on hover\n\
+         window_preview_width = {} # preview thumbnail width in pixels\n\
+         window_preview_delay = {} # hover delay in milliseconds before showing preview\n",
+        cfg.icon_size,
+        cfg.anchor,
+        cfg.animation_ms,
+        cfg.icon_theme,
+        cfg.locked,
+        cfg.window_preview,
+        cfg.window_preview_width,
+        cfg.window_preview_delay
     );
     fs::write(path, content)
 }
@@ -351,6 +370,8 @@ pub const DEFAULT_CSS: &str = r#"/** ~/.config/hyprland-dock/style.css — hyprl
  *   .dock-btn.drop-target   — drop target highlight during drag
  *   popover.dock-tooltip    - icon tooltip hover
  *   popover.dock-popover    — right-click context menu
+ *   .dock-tooltip-label     - tooltip label
+ *   .dock-tooltip-preview   - thumbnail preview
  */
 window.dock-window {
     background: none;
@@ -433,6 +454,11 @@ popover.dock-tooltip contents {
     color: #cdd6f4;
     font-size: 12px;
     font-weight: 500;
+    margin: 4px 0;
+}
+.dock-tooltip-preview {
+    border-radius: 6px;
+    margin-top: 10px;
 }
 "#;
 
