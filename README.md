@@ -8,8 +8,10 @@
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/) [![GTK4](https://img.shields.io/badge/toolkit-GTK4-blue.svg)](https://gtk.org/) [![Wayland](https://img.shields.io/badge/protocol-Wayland-brightgreen.svg)](https://wayland.freedesktop.org/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 <br/>
-
 <img src="assets/screenshot.webp" alt="hyprland-dock screenshot" width="800" />
+<br/>
+<br/>
+<video src="https://github.com/user-attachments/assets/c441a497-1fc0-475f-a036-49165b2070b0" controls width="800"></video>
 
 </div>
 
