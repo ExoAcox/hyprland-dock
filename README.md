@@ -22,7 +22,7 @@
 - **Blazing Fast & Low Memory Footprint**: Native Rust binary with immediate startup and minimal resource usage.
 - **Hyprland IPC Native Integration**: Listens directly to Hyprland's `socket2.sock` event stream for instant, zero-lag window tracking, state synchronization and live window preview.
 - **Smart Auto-Hide**: Automatically slides out when tiled windows occupy the active workspace, and slides back in when you approach the screen edge hotzone or switch to an empty/floating workspace.
-- **Rich Context Menu**: Right-click any icon to launch a new instance, close the window, pin/unpin from the dock, or lock/unlock icon positions.
+- **Rich Context Menu**: Right-click any icon to launch a new instance, close the window, pin/unpin from the dock, edit launcher settings (command, label, icon) in a modal, or lock/unlock icon positions.
 - **Full GTK4 CSS Theming**: Fully customizable styling via `~/.config/hyprland-dock/style.css` with live reloading.
 
 ---
@@ -108,14 +108,15 @@ window_preview_delay = 200 # Hover delay in milliseconds before showing preview
 ### 2. `apps.conf` (Pinned Launchers)
 Located at `~/.config/hyprland-dock/apps.conf`. Defines apps that stay pinned on the dock even when not running:
 ```csv
-# Format: class,icon,command
-firefox,firefox,firefox
-kitty,kitty,kitty
-thunar,thunar,thunar
+# Format: class,command,label,icon
+firefox,firefox,Firefox,firefox
+kitty,kitty,Kitty,
+thunar,thunar,Thunar,
 ```
 - **class**: Window class as reported by `hyprctl clients` (or app ID).
-- **icon**: Icon theme name (leave empty to fallback to class).
 - **command**: Executable binary or launch command.
+- **label**: Custom display name / tooltip label (leave empty to fallback to class name).
+- **icon**: Icon theme name (leave empty to use the app's default icon directly).
 
 *Running applications that are not pinned will automatically appear at the end of the dock.*
 

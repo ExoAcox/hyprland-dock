@@ -73,6 +73,7 @@ fn build_ui(app: &gtk4::Application) {
     win.set_layer(Layer::Top);
     win.set_namespace(Some("hyprland-dock"));
     hypr::setup_layer_rules();
+    hypr::setup_window_rules();
     win.set_anchor(anchor_edge, true);
     win.set_exclusive_zone(-1); // -1 = match content height so windows do not overlap
 
@@ -379,9 +380,8 @@ fn refresh_dock(
     // Empty or full floating ("window mode") -> shown.
     // Cursor in hotzone / menu open -> stays shown.
     let has_tiling = workspace_has_tiling(&running);
-    let hide_dock = has_tiling
-        && !MOUSE_HOT.load(std::sync::atomic::Ordering::Relaxed)
-        && !is_menu_open();
+    let hide_dock =
+        has_tiling && !MOUSE_HOT.load(std::sync::atomic::Ordering::Relaxed) && !is_menu_open();
 
     let anchor = match anchor_str.as_str() {
         "top" => Edge::Top,
@@ -453,6 +453,7 @@ fn refresh_dock(
         let (icon, cmd) = config::resolve_app_info(&c.class, c.pid);
         let launchable = PinnedApp {
             class: c.class.clone(),
+            label: display_class_name(&c.class),
             icon,
             command: cmd,
         };
@@ -506,7 +507,10 @@ fn state_signature(
 ) -> String {
     let mut sig = format!("locked:{}|active:{}|", locked, active_addr.unwrap_or(""));
     for p in pinned {
-        sig.push_str(&format!("{},{}|", p.class, p.command));
+        sig.push_str(&format!(
+            "{},{},{},{}|",
+            p.class, p.command, p.label, p.icon
+        ));
     }
     for c in running {
         sig.push_str(&format!(
@@ -530,14 +534,22 @@ fn dock_button(
     cfg: &std::rc::Rc<std::cell::RefCell<config::ConfigFile>>,
 ) -> gtk4::Button {
     let tooltip = if let Some(c) = &running {
-        let class = display_class_name(&c.class);
-        if c.title.is_empty() {
-            class
+        let name = if !app.label.is_empty() {
+            &app.label
         } else {
-            format!("{} — {}", class, c.title)
+            &display_class_name(&c.class)
+        };
+        if c.title.is_empty() {
+            name.to_string()
+        } else {
+            format!("{} — {}", name, c.title)
         }
     } else {
-        display_class_name(&app.class)
+        if !app.label.is_empty() {
+            app.label.clone()
+        } else {
+            display_class_name(&app.class)
+        }
     };
 
     let btn = gtk4::Button::new();
@@ -562,7 +574,7 @@ fn dock_button(
         running.clone(),
         hover_popover.clone(),
     ));
-    setup_context_menu(&btn, app, running.as_ref(), &hover_popover, cfg);
+    setup_context_menu(&btn, icon_theme, app, running.as_ref(), &hover_popover, cfg);
     setup_drag_and_drop(&btn, app, &hover_popover, cfg);
 
     btn
@@ -747,6 +759,7 @@ fn setup_hover_tooltip(
 
 fn setup_context_menu(
     btn: &gtk4::Button,
+    icon_theme: &gtk4::IconTheme,
     app: &PinnedApp,
     running: Option<&hypr::Client>,
     hover_popover: &gtk4::Popover,
@@ -766,17 +779,27 @@ fn setup_context_menu(
     let menu_box = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
 
     let title_text = if let Some(c) = running {
-        if c.title.is_empty() {
+        if !app.label.is_empty() {
+            if c.title.is_empty() {
+                app.label.clone()
+            } else {
+                c.title.clone()
+            }
+        } else if c.title.is_empty() {
             display_class_name(&c.class)
         } else {
             c.title.clone()
         }
     } else {
-        display_class_name(&app.class)
+        if !app.label.is_empty() {
+            app.label.clone()
+        } else {
+            display_class_name(&app.class)
+        }
     };
     let title_label = gtk4::Label::new(Some(&title_text));
     title_label.add_css_class("dock-menu-title");
-    title_label.set_halign(gtk4::Align::Start);
+    title_label.set_halign(gtk4::Align::Fill);
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     title_label.set_max_width_chars(25);
     menu_box.append(&title_label);
@@ -821,6 +844,28 @@ fn setup_context_menu(
         menu_box.append(&sep2);
     }
 
+    let is_locked = cfg.borrow().locked;
+
+    // Edit Icon option
+    let edit_btn = gtk4::Button::builder()
+        .label("Edit Icon")
+        .css_classes(["dock-menu-btn"])
+        .halign(gtk4::Align::Fill)
+        .sensitive(!is_locked)
+        .build();
+    if !is_locked {
+        edit_btn.set_cursor_from_name(Some("pointer"));
+    }
+
+    let popover_edit = popover.clone();
+    let app_edit = app.clone();
+    let theme_edit = icon_theme.clone();
+    edit_btn.connect_clicked(move |_| {
+        popover_edit.popdown();
+        show_edit_dialog(&app_edit, &theme_edit);
+    });
+    menu_box.append(&edit_btn);
+
     // Pin / Unpin option
     let is_pinned = config::load_pinned()
         .iter()
@@ -834,8 +879,11 @@ fn setup_context_menu(
         .label(pin_label)
         .css_classes(["dock-menu-btn"])
         .halign(gtk4::Align::Fill)
+        .sensitive(!is_locked)
         .build();
-    pin_btn.set_cursor_from_name(Some("pointer"));
+    if !is_locked {
+        pin_btn.set_cursor_from_name(Some("pointer"));
+    }
 
     let popover_pin = popover.clone();
     let app_pin = app.clone();
@@ -846,6 +894,9 @@ fn setup_context_menu(
             pinned.retain(|p| !same_class(&p.class, &app_pin.class));
         } else {
             let mut to_pin = app_pin.clone();
+            if to_pin.label.is_empty() {
+                to_pin.label = display_class_name(&to_pin.class);
+            }
             if !config::binary_exists(&to_pin.command) {
                 let (icon, cmd) = config::resolve_app_info(&to_pin.class, None);
                 if config::binary_exists(&cmd) {
@@ -854,6 +905,10 @@ fn setup_context_menu(
                         to_pin.icon = icon;
                     }
                 }
+            }
+            if to_pin.icon.is_empty() {
+                let (icon, _) = config::resolve_app_info(&to_pin.class, None);
+                to_pin.icon = icon;
             }
             if !pinned.iter().any(|p| same_class(&p.class, &to_pin.class)) {
                 pinned.push(to_pin);
@@ -865,7 +920,6 @@ fn setup_context_menu(
     menu_box.append(&pin_btn);
 
     // Lock / Unlock option
-    let is_locked = cfg.borrow().locked;
     let lock_label = if is_locked {
         "Unlock Dock"
     } else {
@@ -906,6 +960,512 @@ fn setup_context_menu(
         MENU_OPEN_COUNT.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         EVENT_PENDING.store(true, std::sync::atomic::Ordering::Relaxed);
     });
+}
+
+/// Modal dialog to edit launcher command, label, and icon (class is read-only).
+fn show_edit_dialog(app: &PinnedApp, icon_theme: &gtk4::IconTheme) {
+    let window = gtk4::Window::builder()
+        .title("Edit Icon")
+        .default_width(400)
+        .resizable(false)
+        .modal(false)
+        .build();
+    window.add_css_class("dock-edit-window");
+
+    MENU_OPEN_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    window.connect_close_request(|_| {
+        MENU_OPEN_COUNT.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        EVENT_PENDING.store(true, std::sync::atomic::Ordering::Relaxed);
+        glib::Propagation::Proceed
+    });
+
+    let root = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
+    root.set_margin_top(20);
+    root.set_margin_bottom(20);
+    root.set_margin_start(20);
+    root.set_margin_end(20);
+
+    // Header with current icon preview and title
+    let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
+    header_box.set_halign(gtk4::Align::Start);
+    header_box.set_valign(gtk4::Align::Center);
+
+    let icon_preview = hypr::icon_image(icon_theme, &app.class, &app.icon);
+    icon_preview.set_pixel_size(48);
+    icon_preview.set_cursor_from_name(Some("pointer"));
+    icon_preview.set_tooltip_text(Some("Click to browse theme icons"));
+    header_box.append(&icon_preview);
+
+    let header_text_box = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    let title = gtk4::Label::builder()
+        .label("Edit Icon")
+        .halign(gtk4::Align::Start)
+        .css_classes(["dock-edit-title"])
+        .build();
+    let subtitle = gtk4::Label::builder()
+        .label(&format!("Configure settings for {}", app.class))
+        .halign(gtk4::Align::Start)
+        .css_classes(["dock-edit-subtitle"])
+        .build();
+    header_text_box.append(&title);
+    header_text_box.append(&subtitle);
+    header_box.append(&header_text_box);
+    root.append(&header_box);
+
+    let sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+    root.append(&sep);
+
+    // Form fields
+    let form = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
+
+    // Field 1: Class (Read-only, cannot be edited)
+    let class_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    let class_lbl = gtk4::Label::builder()
+        .label("Class")
+        .halign(gtk4::Align::Start)
+        .css_classes(["dock-edit-label"])
+        .build();
+    let class_entry = gtk4::Entry::builder()
+        .text(&app.class)
+        .editable(false)
+        .can_focus(false)
+        .sensitive(false)
+        .css_classes(["dock-edit-entry", "disabled"])
+        .build();
+    class_box.append(&class_lbl);
+    class_box.append(&class_entry);
+    form.append(&class_box);
+
+    // Field 2: Command
+    let cmd_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    let cmd_lbl = gtk4::Label::builder()
+        .label("Command")
+        .halign(gtk4::Align::Start)
+        .css_classes(["dock-edit-label"])
+        .build();
+    let cmd_entry = gtk4::Entry::builder()
+        .text(&app.command)
+        .placeholder_text("e.g. firefox")
+        .css_classes(["dock-edit-entry"])
+        .build();
+    cmd_box.append(&cmd_lbl);
+    cmd_box.append(&cmd_entry);
+    form.append(&cmd_box);
+
+    // Field 3: Label
+    let label_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    let label_lbl = gtk4::Label::builder()
+        .label("Label")
+        .halign(gtk4::Align::Start)
+        .css_classes(["dock-edit-label"])
+        .build();
+    let label_entry = gtk4::Entry::builder()
+        .text(&app.label)
+        .placeholder_text("e.g. Firefox Browser")
+        .css_classes(["dock-edit-entry"])
+        .build();
+    label_box.append(&label_lbl);
+    label_box.append(&label_entry);
+    form.append(&label_box);
+
+    // Field 4: Icon (with Browse Theme button)
+    let icon_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    let icon_lbl = gtk4::Label::builder()
+        .label("Icon (leave empty for app default)")
+        .halign(gtk4::Align::Start)
+        .css_classes(["dock-edit-label"])
+        .build();
+
+    let icon_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let icon_entry = gtk4::Entry::builder()
+        .text(&app.icon)
+        .placeholder_text("e.g. firefox")
+        .css_classes(["dock-edit-entry"])
+        .hexpand(true)
+        .build();
+
+    let browse_btn = gtk4::Button::builder()
+        .label("Browse Icons")
+        .css_classes(["dock-picker-browse-btn"])
+        .build();
+    browse_btn.set_cursor_from_name(Some("pointer"));
+    browse_btn.set_tooltip_text(Some("Pick icon directly from active theme"));
+
+    icon_row.append(&icon_entry);
+    icon_row.append(&browse_btn);
+
+    icon_box.append(&icon_lbl);
+    icon_box.append(&icon_row);
+    form.append(&icon_box);
+
+    root.append(&form);
+
+    // Live preview update on typing
+    let icon_preview_clone = icon_preview.clone();
+    let class_clone = app.class.clone();
+    let theme_clone = icon_theme.clone();
+    icon_entry.connect_changed(move |entry| {
+        let typed = entry.text().trim().to_string();
+        let name = hypr::resolve_icon_name(&theme_clone, &class_clone, &typed);
+        icon_preview_clone.set_icon_name(Some(&name));
+    });
+
+    // Open icon picker from Browse button
+    let win_picker = window.clone();
+    let theme_picker = icon_theme.clone();
+    let class_picker = app.class.clone();
+    let entry_picker = icon_entry.clone();
+    let preview_picker = icon_preview.clone();
+    browse_btn.connect_clicked(move |_| {
+        show_icon_picker(
+            &win_picker,
+            &theme_picker,
+            &class_picker,
+            &entry_picker,
+            &preview_picker,
+        );
+    });
+
+    // Also clicking the icon preview opens the icon picker
+    let preview_click = gtk4::GestureClick::new();
+    let win_picker2 = window.clone();
+    let theme_picker2 = icon_theme.clone();
+    let class_picker2 = app.class.clone();
+    let entry_picker2 = icon_entry.clone();
+    let preview_picker2 = icon_preview.clone();
+    preview_click.connect_pressed(move |_, _, _, _| {
+        show_icon_picker(
+            &win_picker2,
+            &theme_picker2,
+            &class_picker2,
+            &entry_picker2,
+            &preview_picker2,
+        );
+    });
+    icon_preview.add_controller(preview_click);
+
+    // Action buttons (Cancel / Save)
+    let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    btn_box.set_halign(gtk4::Align::End);
+    btn_box.set_margin_top(8);
+
+    let cancel_btn = gtk4::Button::builder()
+        .label("Cancel")
+        .css_classes(["dock-edit-btn", "cancel"])
+        .build();
+    cancel_btn.set_cursor_from_name(Some("pointer"));
+    let win_cancel = window.clone();
+    cancel_btn.connect_clicked(move |_| {
+        win_cancel.close();
+    });
+    btn_box.append(&cancel_btn);
+
+    let save_btn = gtk4::Button::builder()
+        .label("Save")
+        .css_classes(["dock-edit-btn", "save"])
+        .build();
+    save_btn.set_cursor_from_name(Some("pointer"));
+
+    let win_save = window.clone();
+    let app_target = app.clone();
+    let cmd_entry_save = cmd_entry.clone();
+    let label_entry_save = label_entry.clone();
+    let icon_entry_save = icon_entry.clone();
+
+    save_btn.connect_clicked(move |_| {
+        let new_cmd = cmd_entry_save.text().trim().to_string();
+        let new_label = label_entry_save.text().trim().to_string();
+        let new_icon = icon_entry_save.text().trim().to_string();
+
+        let final_cmd = if new_cmd.is_empty() {
+            app_target.command.clone()
+        } else {
+            new_cmd
+        };
+
+        let mut pinned = config::load_pinned();
+        if let Some(pos) = pinned
+            .iter()
+            .position(|p| same_class(&p.class, &app_target.class))
+        {
+            pinned[pos].command = final_cmd;
+            pinned[pos].label = new_label;
+            pinned[pos].icon = new_icon;
+        } else {
+            pinned.push(PinnedApp {
+                class: app_target.class.clone(),
+                command: final_cmd,
+                label: new_label,
+                icon: new_icon,
+            });
+        }
+
+        let _ = config::save_pinned(&pinned);
+        EVENT_PENDING.store(true, std::sync::atomic::Ordering::Relaxed);
+        win_save.close();
+    });
+    btn_box.append(&save_btn);
+
+    let save_btn_enter1 = save_btn.clone();
+    cmd_entry.connect_activate(move |_| save_btn_enter1.emit_clicked());
+    let save_btn_enter2 = save_btn.clone();
+    label_entry.connect_activate(move |_| save_btn_enter2.emit_clicked());
+    let save_btn_enter3 = save_btn.clone();
+    icon_entry.connect_activate(move |_| save_btn_enter3.emit_clicked());
+
+    // ESC key to close
+    let key_controller = gtk4::EventControllerKey::new();
+    let win_key = window.clone();
+    key_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == gtk4::gdk::Key::Escape {
+            win_key.close();
+            glib::Propagation::Stop
+        } else {
+            glib::Propagation::Proceed
+        }
+    });
+    window.add_controller(key_controller);
+
+    root.append(&btn_box);
+    window.set_child(Some(&root));
+
+    hypr::setup_window_rules();
+    window.present();
+}
+
+/// Modal icon picker to browse and select icons directly from the active GTK icon theme.
+fn show_icon_picker(
+    parent: &gtk4::Window,
+    icon_theme: &gtk4::IconTheme,
+    app_class: &str,
+    target_entry: &gtk4::Entry,
+    target_preview: &gtk4::Image,
+) {
+    let window = gtk4::Window::builder()
+        .title("Select Icon")
+        .default_width(620)
+        .default_height(480)
+        .resizable(false)
+        .modal(false)
+        .transient_for(parent)
+        .build();
+    window.add_css_class("dock-picker-window");
+
+    MENU_OPEN_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    window.connect_close_request(|_| {
+        MENU_OPEN_COUNT.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        EVENT_PENDING.store(true, std::sync::atomic::Ordering::Relaxed);
+        glib::Propagation::Proceed
+    });
+
+    let root = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
+    root.set_margin_top(16);
+    root.set_margin_bottom(16);
+    root.set_margin_start(16);
+    root.set_margin_end(16);
+
+    let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let title = gtk4::Label::builder()
+        .label("Select Icon from Theme")
+        .halign(gtk4::Align::Start)
+        .css_classes(["dock-edit-title"])
+        .build();
+    header_box.append(&title);
+    root.append(&header_box);
+
+    let search_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let search_entry = gtk4::SearchEntry::builder()
+        .placeholder_text("Search icons (e.g. firefox, terminal, player)...")
+        .css_classes(["dock-picker-search"])
+        .hexpand(true)
+        .build();
+    search_box.append(&search_entry);
+    root.append(&search_box);
+
+    let count_lbl = gtk4::Label::builder()
+        .label("Loading icons...")
+        .halign(gtk4::Align::Start)
+        .css_classes(["dock-picker-count"])
+        .build();
+    root.append(&count_lbl);
+
+    let scrolled = gtk4::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .vscrollbar_policy(gtk4::PolicyType::Automatic)
+        .css_classes(["dock-picker-scroll"])
+        .vexpand(true)
+        .build();
+
+    let flowbox = gtk4::FlowBox::builder()
+        .selection_mode(gtk4::SelectionMode::None)
+        .valign(gtk4::Align::Start)
+        .min_children_per_line(4)
+        .max_children_per_line(7)
+        .homogeneous(true)
+        .row_spacing(8)
+        .column_spacing(8)
+        .css_classes(["dock-picker-flowbox"])
+        .build();
+
+    scrolled.set_child(Some(&flowbox));
+    root.append(&scrolled);
+
+    let bottom_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    bottom_box.set_halign(gtk4::Align::End);
+
+    let cancel_btn = gtk4::Button::builder()
+        .label("Cancel")
+        .css_classes(["dock-edit-btn", "cancel"])
+        .build();
+    cancel_btn.set_cursor_from_name(Some("pointer"));
+    let win_cancel = window.clone();
+    cancel_btn.connect_clicked(move |_| {
+        win_cancel.close();
+    });
+    bottom_box.append(&cancel_btn);
+    root.append(&bottom_box);
+
+    window.set_child(Some(&root));
+
+    // ESC to close
+    let key_controller = gtk4::EventControllerKey::new();
+    let win_key = window.clone();
+    key_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == gtk4::gdk::Key::Escape {
+            win_key.close();
+            glib::Propagation::Stop
+        } else {
+            glib::Propagation::Proceed
+        }
+    });
+    window.add_controller(key_controller);
+
+    // Cache sorted icon names from active theme
+    let all_icons: std::rc::Rc<Vec<String>> = {
+        let mut list: Vec<String> = icon_theme
+            .icon_names()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+        list.sort();
+        list.dedup();
+        std::rc::Rc::new(list)
+    };
+
+    let populate_grid = {
+        let flowbox = flowbox.clone();
+        let count_lbl = count_lbl.clone();
+        let all_icons = all_icons.clone();
+        let target_entry = target_entry.clone();
+        let target_preview = target_preview.clone();
+        let icon_theme = icon_theme.clone();
+        let app_class = app_class.to_string();
+        let window = window.clone();
+
+        move |query: &str| {
+            while let Some(child) = flowbox.first_child() {
+                flowbox.remove(&child);
+            }
+
+            let q = query.trim().to_lowercase();
+            let matches: Vec<&String> = if q.is_empty() {
+                all_icons.iter().take(120).collect()
+            } else {
+                all_icons
+                    .iter()
+                    .filter(|name| name.to_lowercase().contains(&q))
+                    .take(120)
+                    .collect()
+            };
+
+            let total_matches = if q.is_empty() {
+                all_icons.len()
+            } else {
+                all_icons
+                    .iter()
+                    .filter(|name| name.to_lowercase().contains(&q))
+                    .count()
+            };
+
+            if q.is_empty() {
+                count_lbl.set_label(&format!(
+                    "Showing {} of {} icons (type to filter)",
+                    matches.len(),
+                    all_icons.len()
+                ));
+            } else {
+                count_lbl.set_label(&format!(
+                    "Found {} icons (showing top {})",
+                    total_matches,
+                    matches.len()
+                ));
+            }
+
+            for icon_name in matches {
+                let btn = gtk4::Button::new();
+                btn.add_css_class("dock-icon-card");
+                btn.set_cursor_from_name(Some("pointer"));
+                btn.set_tooltip_text(Some(icon_name));
+                btn.set_valign(gtk4::Align::Start);
+                btn.set_size_request(82, 82);
+
+                let item_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+                item_box.set_halign(gtk4::Align::Center);
+                item_box.set_valign(gtk4::Align::Center);
+                item_box.set_margin_top(4);
+                item_box.set_margin_bottom(4);
+                item_box.set_margin_start(4);
+                item_box.set_margin_end(4);
+
+                let img = gtk4::Image::from_icon_name(icon_name);
+                img.set_pixel_size(40);
+                item_box.append(&img);
+
+                let lbl = gtk4::Label::new(Some(icon_name));
+                lbl.add_css_class("dock-icon-card-label");
+                lbl.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+                lbl.set_max_width_chars(11);
+                item_box.append(&lbl);
+
+                btn.set_child(Some(&item_box));
+
+                let chosen = icon_name.clone();
+                let target_entry_c = target_entry.clone();
+                let target_preview_c = target_preview.clone();
+                let win_c = window.clone();
+                let theme_c = icon_theme.clone();
+                let class_c = app_class.clone();
+
+                btn.connect_clicked(move |_| {
+                    target_entry_c.set_text(&chosen);
+                    let resolved = hypr::resolve_icon_name(&theme_c, &class_c, &chosen);
+                    target_preview_c.set_icon_name(Some(&resolved));
+                    win_c.close();
+                });
+
+                flowbox.append(&btn);
+            }
+        }
+    };
+
+    let initial_query = target_entry.text().trim().to_string();
+    let start_q = if !initial_query.is_empty() {
+        initial_query
+    } else {
+        display_class_name(app_class)
+    };
+
+    search_entry.set_text(&start_q);
+    populate_grid(&start_q);
+
+    let populate_clone = std::rc::Rc::new(populate_grid);
+    let pop_ref = populate_clone.clone();
+    search_entry.connect_search_changed(move |entry| {
+        pop_ref(&entry.text());
+    });
+
+    hypr::setup_window_rules();
+    window.present();
 }
 
 fn setup_drag_and_drop(
@@ -996,6 +1556,7 @@ fn reorder_pinned(source_class: &str, target_class: &str) {
         let (icon, cmd) = config::resolve_app_info(&client.class, client.pid);
         PinnedApp {
             class: client.class.clone(),
+            label: display_class_name(&client.class),
             icon,
             command: cmd,
         }

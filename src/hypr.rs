@@ -80,6 +80,14 @@ pub fn setup_layer_rules() {
     ]);
 }
 
+/// Ensure compositor window rules (float, center) are registered for Edit Icon and Select Icon dialogs.
+pub fn setup_window_rules() {
+    let _ = run(&["hyprctl", "keyword", "windowrulev2", "float, title:^(Edit Icon)$"]);
+    let _ = run(&["hyprctl", "keyword", "windowrulev2", "center, title:^(Edit Icon)$"]);
+    let _ = run(&["hyprctl", "keyword", "windowrulev2", "float, title:^(Select Icon)$"]);
+    let _ = run(&["hyprctl", "keyword", "windowrulev2", "center, title:^(Select Icon)$"]);
+}
+
 /// List of all mapped client windows.
 pub fn clients() -> Vec<Client> {
     let Some(json) = run(&["hyprctl", "-j", "clients"]) else {
@@ -183,15 +191,26 @@ pub fn spawn(command: &str) {
 /// Icon size in pixels. Change this to resize dock icons.
 pub const ICON_SIZE: i32 = 36;
 
-/// Icon from window class, fallback to the class itself.
-pub fn icon_image(icon_theme: &gtk4::IconTheme, class: &str, icon: &str) -> gtk4::Image {
-    let candidates = [icon, class, &class.to_lowercase()];
-    let name = candidates
+/// Resolve icon name to display, falling back to app info or executable icon.
+pub fn resolve_icon_name(icon_theme: &gtk4::IconTheme, class: &str, icon: &str) -> String {
+    let (app_icon, _) = if icon.is_empty() {
+        crate::config::resolve_app_info(class, None)
+    } else {
+        (String::new(), String::new())
+    };
+    let candidates = [icon, &app_icon, class, &class.to_lowercase()];
+    candidates
         .iter()
+        .filter(|n| !n.is_empty())
         .find(|n| icon_theme.has_icon(n))
-        .map(|n| n.as_ref())
-        .unwrap_or("application-x-executable");
-    let img = gtk4::Image::from_icon_name(name);
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "application-x-executable".to_string())
+}
+
+/// Icon from window class, fallback to the app info or class itself.
+pub fn icon_image(icon_theme: &gtk4::IconTheme, class: &str, icon: &str) -> gtk4::Image {
+    let name = resolve_icon_name(icon_theme, class, icon);
+    let img = gtk4::Image::from_icon_name(&name);
     img.set_pixel_size(ICON_SIZE);
     img
 }

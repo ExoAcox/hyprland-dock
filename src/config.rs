@@ -1,15 +1,16 @@
 // ~/.config/hyprland-dock/apps.conf
-// Format per line:  class,icon,command
+// Format per line:  class,command,label,icon
 // Empty lines and `#` comments are skipped.
 
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PinnedApp {
     pub class: String,
-    pub icon: String,
     pub command: String,
+    pub label: String,
+    pub icon: String,
 }
 
 fn config_dir() -> PathBuf {
@@ -24,10 +25,10 @@ fn config_path() -> PathBuf {
 
 pub fn default_content() -> String {
     String::from(
-        "# Format: class,icon,command\n\
-         firefox,firefox,firefox\n\
-         kitty,kitty,kitty\n\
-         thunar,thunar,thunar\n",
+        "# Format: class,command,label,icon\n\
+         firefox,firefox,Firefox,firefox\n\
+         kitty,kitty,Kitty,kitty\n\
+         thunar,thunar,Thunar,thunar\n",
     )
 }
 
@@ -36,9 +37,12 @@ pub fn save_pinned(apps: &[PinnedApp]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let mut out = String::from("# Format: class,icon,command\n");
+    let mut out = String::from("# Format: class,command,label,icon\n");
     for app in apps {
-        out.push_str(&format!("{},{},{}\n", app.class, app.icon, app.command));
+        out.push_str(&format!(
+            "{},{},{},{}\n",
+            app.class, app.command, app.label, app.icon
+        ));
     }
     fs::write(path, out)
 }
@@ -448,6 +452,10 @@ popover.dock-popover contents {
     background: rgba(255, 255, 255, 0.12);
     color: #ffffff;
 }
+.dock-menu-btn:disabled {
+    color: #6c7086;
+    opacity: 0.45;
+}
 .dock-menu-title {
     font-weight: bold;
     font-size: 12px;
@@ -477,6 +485,145 @@ popover.dock-tooltip contents {
 .dock-tooltip-preview {
     border-radius: 6px;
     margin-top: 6px;
+}
+window.dock-edit-window {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+}
+.dock-edit-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #cdd6f4;
+}
+.dock-edit-subtitle {
+    font-size: 12px;
+    color: #a6adc8;
+}
+.dock-edit-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #bac2de;
+}
+entry.dock-edit-entry {
+    background-color: rgba(17, 17, 27, 0.7);
+    color: #cdd6f4;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+entry.dock-edit-entry:focus {
+    border-color: #89b4fa;
+}
+entry.dock-edit-entry.disabled {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: #6c7086;
+    border-color: rgba(255, 255, 255, 0.06);
+}
+button.dock-edit-btn {
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 600;
+}
+button.dock-edit-btn.cancel {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #cdd6f4;
+}
+button.dock-edit-btn.cancel:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+button.dock-edit-btn.save {
+    background: #89b4fa;
+    border: 1px solid #89b4fa;
+    color: #11111b;
+}
+button.dock-edit-btn.save:hover {
+    background: #b4befe;
+    border-color: #b4befe;
+}
+window.dock-picker-window {
+    background-color: #181825;
+    color: #cdd6f4;
+}
+entry.dock-picker-search {
+    background-color: rgba(30, 30, 46, 0.9);
+    color: #cdd6f4;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+entry.dock-picker-search:focus {
+    border-color: #89b4fa;
+}
+entry.dock-picker-search image.left,
+entry.dock-picker-search > image:first-child {
+    margin-right: 10px;
+    margin-left: 2px;
+}
+entry.dock-picker-search image.right,
+entry.dock-picker-search > image:last-child {
+    margin-left: 10px;
+    margin-right: 2px;
+}
+.dock-picker-count {
+    font-size: 11px;
+    color: #a6adc8;
+}
+scrolledwindow.dock-picker-scroll {
+    background-color: rgba(17, 17, 27, 0.6);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+flowbox.dock-picker-flowbox {
+    background: transparent;
+    padding: 8px;
+}
+flowboxchild {
+    padding: 2px;
+}
+button.dock-icon-card {
+    min-width: 80px;
+    max-width: 88px;
+    min-height: 80px;
+    max-height: 84px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 6px 4px;
+    transition: all 120ms ease-out;
+}
+button.dock-icon-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(137, 180, 250, 0.5);
+    -gtk-icon-transform: scale(1.1);
+}
+button.dock-icon-card:active {
+    background: rgba(137, 180, 250, 0.2);
+}
+.dock-icon-card-label {
+    font-size: 10px;
+    color: #a6adc8;
+    margin-top: 2px;
+}
+button.dock-icon-card:hover .dock-icon-card-label {
+    color: #ffffff;
+}
+button.dock-picker-browse-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: #cdd6f4;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+}
+button.dock-picker-browse-btn:hover {
+    background: rgba(137, 180, 250, 0.2);
+    border-color: #89b4fa;
+    color: #ffffff;
 }
 "#;
 
@@ -528,18 +675,89 @@ pub fn parse_config(content: &str) -> Vec<PinnedApp> {
         .map(|l| l.trim())
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .filter_map(|l| {
-            let mut parts = l.splitn(3, ',');
-            let class = parts.next()?.trim().to_string();
-            let icon = parts.next()?.trim().to_string();
-            let command = parts.next()?.trim().to_string();
-            if class.is_empty() || command.is_empty() {
-                return None;
+            let parts: Vec<&str> = l.splitn(4, ',').collect();
+            if parts.len() == 4 {
+                let class = parts[0].trim().to_string();
+                let command = parts[1].trim().to_string();
+                let label = parts[2].trim().to_string();
+                let raw_icon = parts[3].trim().to_string();
+                if class.is_empty() || command.is_empty() {
+                    return None;
+                }
+                let icon = if raw_icon.is_empty() {
+                    let (app_icon, _) = resolve_app_info(&class, None);
+                    if !app_icon.is_empty() {
+                        app_icon
+                    } else {
+                        class.clone()
+                    }
+                } else {
+                    raw_icon
+                };
+                Some(PinnedApp {
+                    class,
+                    command,
+                    label,
+                    icon,
+                })
+            } else if parts.len() == 3 {
+                let class = parts[0].trim().to_string();
+                let p1 = parts[1].trim().to_string();
+                let p2 = parts[2].trim().to_string();
+                if class.is_empty() {
+                    return None;
+                }
+
+                // If p2 is a binary in PATH and p1 is not, treat as legacy class,icon,command
+                let (command, label, raw_icon) = if !binary_exists(&p1) && binary_exists(&p2) {
+                    (p2, String::new(), p1)
+                } else {
+                    (p1, p2, String::new())
+                };
+
+                if command.is_empty() {
+                    return None;
+                }
+
+                let icon = if raw_icon.is_empty() {
+                    let (app_icon, _) = resolve_app_info(&class, None);
+                    if !app_icon.is_empty() {
+                        app_icon
+                    } else {
+                        class.clone()
+                    }
+                } else {
+                    raw_icon
+                };
+
+                Some(PinnedApp {
+                    class,
+                    command,
+                    label,
+                    icon,
+                })
+            } else if parts.len() == 2 {
+                // class,command -> icon resolved from app directly
+                let class = parts[0].trim().to_string();
+                let command = parts[1].trim().to_string();
+                if class.is_empty() || command.is_empty() {
+                    return None;
+                }
+                let (app_icon, _) = resolve_app_info(&class, None);
+                let icon = if !app_icon.is_empty() {
+                    app_icon
+                } else {
+                    class.clone()
+                };
+                Some(PinnedApp {
+                    class,
+                    command,
+                    label: String::new(),
+                    icon,
+                })
+            } else {
+                None
             }
-            Some(PinnedApp {
-                icon: if icon.is_empty() { class.clone() } else { icon },
-                class,
-                command,
-            })
         })
         .collect()
 }
@@ -552,17 +770,62 @@ mod tests {
     fn test_parse_config() {
         let sample = "\
 # comment
-firefox,firefox,firefox
-kitty,,kitty
+firefox,firefox,Firefox,firefox
+kitty,kitty,Kitty,
+thunar,thunar,Thunar
 ";
         let apps = parse_config(sample);
-        assert_eq!(apps.len(), 2);
+        assert_eq!(apps.len(), 3);
         assert_eq!(apps[0].class, "firefox");
-        assert_eq!(apps[0].icon, "firefox");
         assert_eq!(apps[0].command, "firefox");
+        assert_eq!(apps[0].label, "Firefox");
+        assert_eq!(apps[0].icon, "firefox");
         assert_eq!(apps[1].class, "kitty");
-        assert_eq!(apps[1].icon, "kitty");
         assert_eq!(apps[1].command, "kitty");
+        assert_eq!(apps[1].label, "Kitty");
+        assert!(!apps[1].icon.is_empty());
+        assert_eq!(apps[2].class, "thunar");
+        assert_eq!(apps[2].command, "thunar");
+        assert_eq!(apps[2].label, "Thunar");
+        assert!(!apps[2].icon.is_empty());
+    }
+
+    #[test]
+    fn test_empty_icon_resolves_from_app() {
+        let sample = "firefox,firefox,Firefox,\n";
+        let apps = parse_config(sample);
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].class, "firefox");
+        assert_eq!(apps[0].command, "firefox");
+        assert_eq!(apps[0].label, "Firefox");
+        assert!(!apps[0].icon.is_empty());
+    }
+
+    #[test]
+    fn test_save_and_parse() {
+        let apps = vec![
+            PinnedApp {
+                class: "firefox".into(),
+                command: "firefox".into(),
+                label: "Firefox".into(),
+                icon: "firefox".into(),
+            },
+            PinnedApp {
+                class: "kitty".into(),
+                command: "kitty".into(),
+                label: "".into(),
+                icon: "terminal".into(),
+            },
+        ];
+        let mut out = String::from("# Format: class,command,label,icon\n");
+        for app in &apps {
+            out.push_str(&format!(
+                "{},{},{},{}\n",
+                app.class, app.command, app.label, app.icon
+            ));
+        }
+        let parsed = parse_config(&out);
+        assert_eq!(parsed, apps);
     }
 
     #[test]
@@ -606,10 +869,10 @@ locked = true
     #[test]
     fn test_repair_pinned() {
         let sample = "\
-dev.zed.Zed,dev.zed.Zed,dev.zed.zed
-org.pulseaudio.pavucontrol,org.pulseaudio.pavucontrol,org.pulseaudio.pavucontrol
-com.rtosta.zapzap,com.rtosta.zapzap,com.rtosta.zapzap
-org.localsend.localsend_app,org.localsend.localsend_app,org.localsend.localsend_app
+dev.zed.Zed,dev.zed.zed,Zed,dev.zed.Zed
+org.pulseaudio.pavucontrol,org.pulseaudio.pavucontrol,,org.pulseaudio.pavucontrol
+com.rtosta.zapzap,com.rtosta.zapzap,ZapZap,com.rtosta.zapzap
+org.localsend.localsend_app,localsend,localsend
 ";
         let mut apps = parse_config(sample);
         for app in &mut apps {
@@ -625,8 +888,10 @@ org.localsend.localsend_app,org.localsend.localsend_app,org.localsend.localsend_
             }
         }
         assert_eq!(apps[0].command, "zeditor");
+        assert_eq!(apps[0].label, "Zed");
         assert_eq!(apps[1].command, "pavucontrol");
         assert_eq!(apps[2].command, "zapzap");
+        assert_eq!(apps[2].label, "ZapZap");
         assert_eq!(apps[3].command, "localsend");
     }
 }
